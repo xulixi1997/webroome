@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>极光连线 V8.1</title>
+    <title>极光连线 V9.0</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -16,13 +16,12 @@
             --text-main: #f1f5f9;
             --text-sub: #94a3b8;
             --success: #10b981;
-            --danger: #ef4444;
         }
 
         * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg-color);
             background-image: 
                 radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
@@ -33,9 +32,11 @@
             overflow: hidden;
         }
 
+        /* 动画 */
         @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
+        /* 按钮与输入框 */
         .btn {
             background: var(--primary-grad); color: white; border: none; padding: 14px;
             border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 15px; width: 100%;
@@ -52,6 +53,7 @@
         }
         input[type="text"]:focus { border-color: var(--primary); background: rgba(15, 23, 42, 0.9); }
 
+        /* 卡片容器 */
         .card {
             background: var(--card-bg);
             backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
@@ -64,6 +66,7 @@
         .card h2 { font-size: 22px; margin: 0 0 5px 0; font-weight: 700; }
         .card .version { font-size: 12px; color: var(--text-sub); margin-bottom: 30px; letter-spacing: 1px; }
 
+        /* 密钥展示与输入 */
         .key-box {
             background: rgba(0,0,0,0.2); border-radius: 12px; padding: 15px; margin: 20px 0;
             font-family: monospace; font-size: 18px; color: var(--success); cursor: pointer;
@@ -71,6 +74,7 @@
         }
         .key-box:hover { background: rgba(0,0,0,0.4); border-color: var(--success); }
 
+        /* 聊天界面 */
         #chat-app {
             width: 100%; height: 100%; max-width: 1000px; max-height: 900px;
             display: none; flex-direction: column;
@@ -78,7 +82,6 @@
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             position: relative; overflow: hidden;
         }
-        
         @media (min-width: 768px) {
             #chat-app { border-radius: 20px; height: 90vh; border: 1px solid rgba(255,255,255,0.08); }
         }
@@ -90,11 +93,11 @@
         .room-title { font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px; }
         .status-dot { width: 8px; height: 8px; background: var(--success); border-radius: 50%; box-shadow: 0 0 8px var(--success); }
 
+        /* 消息列表 */
         #msg-list {
             flex: 1; overflow-y: auto; padding: 20px;
             display: flex; flex-direction: column; gap: 15px;
         }
-        
         .msg-row { display: flex; flex-direction: column; max-width: 75%; animation: slideIn 0.2s ease; }
         .msg-row.me { align-self: flex-end; align-items: flex-end; }
         .msg-row.other { align-self: flex-start; align-items: flex-start; }
@@ -108,12 +111,12 @@
         .sender-name { font-size: 12px; color: var(--text-sub); margin-bottom: 4px; margin-left: 4px; }
         .me .sender-name { display: none; }
 
+        /* 底部输入区 */
         footer {
             padding: 20px; background: rgba(15, 23, 42, 0.8);
             border-top: 1px solid rgba(255,255,255,0.05);
             display: flex; gap: 12px; align-items: center;
         }
-        
         .icon-btn {
             width: 44px; height: 44px; border-radius: 50%; border: none;
             background: #334155; color: white; font-size: 20px; cursor: pointer;
@@ -121,6 +124,16 @@
         }
         .icon-btn:hover { background: #475569; }
         
+        /* 飞机发送按钮 */
+        .send-btn {
+            width: 50px; height: 44px; border-radius: 22px; border: none;
+            background: var(--primary-grad); color: white; 
+            cursor: pointer; display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); transition: transform 0.1s;
+        }
+        .send-btn:active { transform: scale(0.9); }
+        .send-btn svg { width: 24px; height: 24px; fill: white; margin-left: -2px; transform: rotate(0deg); }
+
         #msg-in { margin: 0; border-radius: 25px; padding-left: 20px; }
 
         #drag-overlay {
@@ -133,7 +146,7 @@
         .file-card { min-width: 200px; }
         .progress-bar { height: 4px; background: rgba(0,0,0,0.2); border-radius: 2px; margin-top: 10px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.2s; }
-        
+
         #toast { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); z-index: 100; pointer-events: none; }
         .toast-msg {
             background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 30px;
@@ -148,24 +161,31 @@
 
     <div id="card-login" class="card active">
         <h2>极光连线</h2>
-        <div class="version">VERSION 8.1</div>
+        <div class="version">VERSION 9.0</div>
+        
         <input type="text" id="nick-in" placeholder="你的昵称" maxlength="12">
-        <input type="text" id="room-in" placeholder="房间号 (支持英文/数字)" onkeypress="handleRoomInput(event)">
+        <input type="text" id="room-in" placeholder="房间号 (支持英文/数字)" onkeypress="handleInput(event)">
+        <input type="text" id="key-custom-in" placeholder="自定义密钥 (留空则自动生成)" style="border-style: dashed; border-color: #475569;">
+        
         <button class="btn" onclick="startApp()">开始连接</button>
     </div>
 
     <div id="card-host" class="card">
         <h2>房间已就绪</h2>
-        <div class="version" style="margin-bottom: 15px;">请将下方密钥发送给好友</div>
+        <div class="version">点击下方卡片复制完整信息</div>
+        
         <div class="key-box" id="host-key-display" onclick="copyInviteInfo()" title="点击复制"></div>
-        <div style="font-size: 13px; color: var(--text-sub); margin-bottom: 25px;">好友输入此密钥后即可建立安全连接</div>
+        
+        <div style="font-size: 13px; color: var(--text-sub); margin-bottom: 25px;">
+            发送给好友，对方验证后即可加入
+        </div>
         <button class="btn" onclick="enterChat('host')">进入聊天室</button>
     </div>
 
     <div id="card-guest" class="card">
         <h2>安全验证</h2>
         <div class="version">请输入房主提供的密钥</div>
-        <input type="text" id="auth-in" placeholder="在此粘贴密钥" style="text-align: center; font-weight: bold; letter-spacing: 1px;">
+        <input type="text" id="auth-in" placeholder="密钥" style="text-align: center; font-weight: bold; letter-spacing: 1px;">
         <button class="btn" onclick="submitAuth()">验证并进入</button>
     </div>
 
@@ -189,14 +209,17 @@
             <button class="icon-btn" onclick="document.getElementById('file-in').click()" title="上传文件">📎</button>
             <input type="file" id="file-in" style="display:none" onchange="processFile(this.files[0])">
             <input type="text" id="msg-in" placeholder="发送消息..." autocomplete="off" onkeypress="if(event.key==='Enter') sendMsg()">
-            <button class="btn" style="width: auto; padding: 0 24px; border-radius: 25px;" onclick="sendMsg()">发送</button>
+            <button class="send-btn" onclick="sendMsg()">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+            </button>
         </footer>
     </div>
 
     <script>
-        // --- 加密核心 ---
+        // --- 修复版加密核心 ---
         const CryptoManager = {
             key: null,
+            
             async deriveKey(password, salt) {
                 const enc = new TextEncoder();
                 const keyMaterial = await window.crypto.subtle.importKey("raw", enc.encode(password), {name: "PBKDF2"}, false, ["deriveKey"]);
@@ -205,6 +228,7 @@
                     keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
                 );
             },
+
             async encryptJson(dataObj) {
                 const enc = new TextEncoder();
                 const encoded = enc.encode(JSON.stringify(dataObj));
@@ -212,32 +236,35 @@
                 const ciphertext = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, this.key, encoded);
                 return { iv: Array.from(iv), ct: Array.from(new Uint8Array(ciphertext)), mode: 'json' };
             },
+
+            // 关键修复：加密二进制时，确保输入输出格式的纯净
             async encryptBuffer(buffer) {
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
                 const ciphertext = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, this.key, buffer);
-                return { iv: Array.from(iv), ct: ciphertext, mode: 'bin' };
+                // 必须转为 Array (Uint8Array -> Array) 才能通过 PeerJS 的 JSON 通道安全传输，防止被自动序列化成对象
+                return { iv: Array.from(iv), ct: Array.from(new Uint8Array(ciphertext)), mode: 'bin' };
             },
+
             async decrypt(pkg) {
                 if (!this.key) throw new Error("Key not initialized");
                 const iv = new Uint8Array(pkg.iv);
-                // 兼容性处理：如果 ct 是普通对象（序列化问题），尝试转回 Uint8Array
-                let ctData = pkg.ct;
-                if (!(ctData instanceof ArrayBuffer) && !(ctData instanceof Uint8Array)) {
-                     // 尝试转换
-                     ctData = new Uint8Array(Object.values(pkg.ct));
-                }
+                // 强制转换 ct 为 Uint8Array，防止 PeerJS 传过来变成 Object
+                let ctData;
+                if (pkg.ct instanceof ArrayBuffer) ctData = pkg.ct;
+                else if (pkg.ct instanceof Array) ctData = new Uint8Array(pkg.ct);
+                else ctData = new Uint8Array(Object.values(pkg.ct));
 
                 if (pkg.mode === 'bin') {
+                    // 返回 ArrayBuffer
                     return await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, this.key, ctData);
                 } else {
-                    const data = new Uint8Array(ctData);
-                    const decrypted = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, this.key, data);
+                    const decrypted = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, this.key, ctData);
                     return JSON.parse(new TextDecoder().decode(decrypted));
                 }
             }
         };
 
-        // --- 应用逻辑 ---
+        // --- 应用状态 ---
         const MAX_FAILURES = 10;
         let peer, myRole, myNick, roomId, roomPwd;
         let failureCount = 0;
@@ -245,21 +272,23 @@
         let hostConn = null;
         let incomingFiles = {};
 
-        function handleRoomInput(e) {
-            const char = String.fromCharCode(e.which);
-            if (!/[a-zA-Z0-9_\-]/.test(char)) {}
-        }
+        function handleInput(e) { /* 允许所有输入 */ }
 
         function startApp() {
             const nick = document.getElementById('nick-in').value.trim();
             let room = document.getElementById('room-in').value.trim();
-            if (!nick || !room) return showToast('请填写完整信息');
+            const customKey = document.getElementById('key-custom-in').value.trim();
+
+            if (!nick || !room) return showToast('请填写昵称和房间号');
             
             myNick = nick; roomId = room;
+            // 如果有自定义密钥就用，没有就暂存空，等 initHost 生成
+            roomPwd = customKey; 
+
             const btn = document.querySelector('#card-login .btn');
             btn.disabled = true; btn.innerText = "连接中...";
             
-            const fullId = 'aurora-v8-fix-' + room; 
+            const fullId = 'aurora-v9-' + room; 
             const tempPeer = new Peer(fullId);
 
             tempPeer.on('open', () => { peer = tempPeer; initHost(); });
@@ -273,9 +302,12 @@
             });
         }
 
+        // --- 房主 ---
         async function initHost() {
             myRole = 'host';
-            roomPwd = generateStrongPwd();
+            // 如果没有自定义，则生成随机
+            if (!roomPwd) roomPwd = generateStrongPwd();
+            
             await CryptoManager.deriveKey(roomPwd, roomId);
             document.getElementById('host-key-display').innerText = roomPwd;
             switchCard('card-host');
@@ -285,11 +317,13 @@
                     try {
                         let data;
                         if (encryptedData.mode === 'bin_chunk') {
+                            // 特殊处理二进制切片解密
                             const iv = new Uint8Array(encryptedData.iv);
-                            // 修复 ct 类型
+                            // 修复数据类型转换问题
                             let ctData = encryptedData.ct;
-                            if (!(ctData instanceof ArrayBuffer)) ctData = new Uint8Array(Object.values(ctData));
-                            
+                            if (ctData instanceof Array) ctData = new Uint8Array(ctData);
+                            else if (!(ctData instanceof ArrayBuffer)) ctData = new Uint8Array(Object.values(ctData));
+
                             const plainBuffer = await window.crypto.subtle.decrypt(
                                 { name: "AES-GCM", iv: iv }, CryptoManager.key, ctData
                             );
@@ -306,7 +340,7 @@
                             handleDecryptedData(data, conn);
                         }
                     } catch (e) {
-                        console.error(e);
+                        console.error("解密失败:", e);
                         failureCount++;
                         if (failureCount >= MAX_FAILURES) destroyRoom();
                     }
@@ -316,9 +350,10 @@
         }
 
         function destroyRoom() {
-            peer.destroy(); alert("安全警告：多次验证失败，房间已销毁"); location.reload();
+            peer.destroy(); alert("安全警告：房间已销毁"); location.reload();
         }
 
+        // --- 访客 ---
         function initGuest(hostId) {
             myRole = 'guest';
             peer = new Peer();
@@ -330,9 +365,9 @@
                         let data;
                         if (pkg.mode === 'bin_chunk') {
                             const iv = new Uint8Array(pkg.iv);
-                            // 修复 ct 类型
                             let ctData = pkg.ct;
-                            if (!(ctData instanceof ArrayBuffer)) ctData = new Uint8Array(Object.values(ctData));
+                            if (ctData instanceof Array) ctData = new Uint8Array(ctData);
+                            else if (!(ctData instanceof ArrayBuffer)) ctData = new Uint8Array(Object.values(ctData));
 
                             const plainBuffer = await window.crypto.subtle.decrypt(
                                 { name: "AES-GCM", iv: iv }, CryptoManager.key, ctData
@@ -344,7 +379,7 @@
                         handleDecryptedData(data);
                     } catch (e) { console.error(e); }
                 });
-                hostConn.on('close', () => { showToast('与房主断开连接'); setTimeout(()=>location.reload(), 2000); });
+                hostConn.on('close', () => { showToast('连接断开'); setTimeout(()=>location.reload(), 2000); });
             });
         }
 
@@ -353,10 +388,11 @@
             if (!pwd) return;
             await CryptoManager.deriveKey(pwd, roomId);
             const btn = document.querySelector('#card-guest .btn');
-            btn.innerText = "正在验证..."; btn.disabled = true;
+            btn.innerText = "验证中..."; btn.disabled = true;
             await sendTo(hostConn, { type: 'HELLO', nick: myNick });
         }
 
+        // --- 数据路由 ---
         function handleDecryptedData(data, senderConn) {
             if (data.type === 'WELCOME') { showToast(data.content); enterChat('guest'); }
             else if (data.type === 'MSG') renderMsg(data, false);
@@ -391,7 +427,6 @@
             renderMsg(pkg, true);
             
             if (myRole === 'host') {
-                 // 房主发送必须并行等待，防止阻塞
                  const promises = [];
                  connMap.forEach(c => promises.push(sendTo(c, pkg)));
                  await Promise.all(promises);
@@ -401,7 +436,7 @@
             input.value = '';
         }
 
-        // --- 修复后的文件逻辑 ---
+        // --- 文件处理 ---
         async function processFile(file) {
             if (!file) return;
             if (file.size > 1024 * 1024 * 1024) return showToast('文件过大 (>1GB)');
@@ -410,11 +445,9 @@
             const meta = { type: 'FILE_META', fileId, name: file.name, size: file.size, type: file.type, nick: myNick };
             renderFileMsg(fileId, file.name, true, null);
             
-            // 关键修复：必须等待 META 发送完成，才能开始发 chunk
+            // 1. 先发 Meta
             if (myRole === 'host') {
-                for (const c of connMap.values()) {
-                    await sendTo(c, meta);
-                }
+                for (const c of connMap.values()) await sendTo(c, meta);
             } else {
                 await sendTo(hostConn, meta);
             }
@@ -431,11 +464,9 @@
             reader.onload = async (e) => {
                 const chunkPkg = { type: 'FILE_CHUNK_BIN', fileId: fileId, payload: e.target.result };
                 
-                // Chunk 发送也需要 await 确保顺序，尤其是对于 Host 转发
+                // 2. 串行发 Chunk
                 if (myRole === 'host') {
-                     for (const c of connMap.values()) {
-                         await sendTo(c, chunkPkg);
-                     }
+                     for (const c of connMap.values()) await sendTo(c, chunkPkg);
                 } else {
                     await sendTo(hostConn, chunkPkg);
                 }
@@ -450,10 +481,7 @@
 
         function handleFileChunk(data) {
             const ctx = incomingFiles[data.fileId];
-            if (!ctx) {
-                console.warn("丢弃了孤立切片: ", data.fileId);
-                return;
-            }
+            if (!ctx) return; // 可能是 Meta 还没到
             ctx.buffer.push(data.payload); 
             ctx.received += data.payload.byteLength;
             updateProgress(data.fileId, ctx.received, ctx.total);
@@ -470,7 +498,7 @@
             renderFileMsg(data.fileId, data.name, false, data.nick);
         }
 
-        // --- UI 操作 ---
+        // --- UI ---
         function enterChat(role) {
             document.querySelectorAll('.card').forEach(e => e.classList.remove('active'));
             const app = document.getElementById('chat-app');
@@ -538,7 +566,13 @@
             let r=''; for(let i=0;i<8;i++) r+=c.charAt(Math.floor(Math.random()*c.length)); 
             return r; 
         }
-        function copyInviteInfo() { navigator.clipboard.writeText(roomPwd).then(() => showToast('密钥已复制')); }
+        
+        // 复制优化：带上房间号
+        function copyInviteInfo() { 
+            const info = `房号: ${roomId}\n密钥: ${roomPwd}`;
+            navigator.clipboard.writeText(info).then(() => showToast('完整信息已复制')); 
+        }
+        
         function showToast(msg) { 
             const t = document.getElementById('toast'); 
             const d = document.createElement('div'); d.className = 'toast-msg'; d.innerText = msg; 
