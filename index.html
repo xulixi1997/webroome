@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>极光连线 V10.1</title>
+    <title>极光连线 V10.2</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -16,6 +16,7 @@
             --text-main: #f1f5f9;
             --text-sub: #94a3b8;
             --success: #10b981;
+            --danger: #ef4444;
         }
 
         * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
@@ -130,6 +131,7 @@
             margin-bottom: 10px; font-size: 14px; backdrop-filter: blur(8px);
             box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: fadeIn 0.3s;
         }
+        .info-log { font-size: 12px; color: #94a3b8; margin-top: 10px; height: 20px; }
     </style>
 </head>
 <body>
@@ -138,7 +140,7 @@
 
     <div id="card-home" class="card active">
         <h2>极光连线</h2>
-        <div class="subtitle">V10.1 多人增强版</div>
+        <div class="subtitle">V10.2 鲁棒连接版</div>
         <input type="text" id="nick-global" placeholder="设置你的昵称" maxlength="12">
         <button class="btn" onclick="goToCreate()">创建房间</button>
         <button class="btn secondary" onclick="goToJoin()">加入房间</button>
@@ -151,6 +153,7 @@
         <input type="text" id="key-create-in" placeholder="设置密钥 (可选)" style="border-style: dashed; border-color: #475569;">
         <button class="btn" onclick="startHost()">创建并等待连接</button>
         <button class="btn secondary" onclick="goHome()">返回</button>
+        <div id="host-log" class="info-log"></div>
     </div>
 
     <div id="card-join" class="card">
@@ -159,6 +162,7 @@
         <input type="text" id="room-join-in" placeholder="输入房号" onkeypress="handleInput(event)">
         <button class="btn" onclick="startGuest()">连接房主</button>
         <button class="btn secondary" onclick="goHome()">返回</button>
+        <div id="guest-log" class="info-log"></div>
     </div>
 
     <div id="card-host-wait" class="card">
@@ -199,15 +203,12 @@
     </div>
 
     <script>
-        // --- 增强的网络配置 (解决第3人连接超时) ---
+        // --- PEER CONFIG ---
         const PEER_CONFIG = {
+            debug: 1,
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun.bg.net.pl:3478' },
-                    { urls: 'stun:stun.mit.de:3478' },
                     { urls: 'stun:global.stun.twilio.com:3478' }
                 ]
             }
@@ -239,6 +240,7 @@
         let connMap = new Map();
         let hostConn = null;
         let incomingFiles = {};
+        let retryCount = 0; // 重试计数
 
         function switchCard(id) { document.querySelectorAll('.card').forEach(e => e.classList.remove('active')); document.getElementById(id).classList.add('active'); }
         function goHome() { switchCard('card-home'); }
@@ -246,22 +248,26 @@
         function goToJoin() { if(!checkNick()) return; switchCard('card-join'); }
         function checkNick() { const val = document.getElementById('nick-global').value.trim(); if(!val) { showToast('请先设置昵称'); return false; } myNick = val; return true; }
         function handleInput(e) { }
+        function setLog(id, msg) { document.getElementById(id).innerText = msg; }
 
         function startHost() {
             const r = document.getElementById('room-create-in').value.trim();
             const k = document.getElementById('key-create-in').value.trim();
             if(!r) return showToast('请输入房号');
             roomId = r; roomPwd = k || generateStrongPwd();
-            const btn = document.querySelector('#card-create .btn'); btn.disabled = true; btn.innerText = "创建中...";
+            const btn = document.querySelector('#card-create .btn'); btn.disabled = true; btn.innerText = "初始化中...";
             
-            // 使用增强配置
+            setLog('host-log', '正在注册房间 ID...');
             peer = new Peer('aurora-v10-' + roomId, PEER_CONFIG);
 
-            peer.on('open', () => { peer = peer; initHostLogic(); });
+            peer.on('open', () => { 
+                setLog('host-log', '房间注册成功，等待连接...');
+                initHostLogic(); 
+            });
             peer.on('error', (err) => {
                 btn.disabled = false; btn.innerText = "创建并等待连接";
                 if(err.type === 'unavailable-id') showToast('房号已被占用');
-                else showToast('错误: ' + err.type);
+                else { showToast('错误: ' + err.type); setLog('host-log', err.type); }
             });
         }
 
@@ -272,10 +278,16 @@
             switchCard('card-host-wait');
 
             peer.on('connection', conn => {
+                // 收到连接
+                conn.on('open', () => {
+                   // 连接已打开，但尚未认证
+                   console.log("新连接建立:", conn.peer);
+                });
+
                 conn.on('data', data => handleData(data, conn));
                 conn.on('close', () => {
                     connMap.delete(conn.peer);
-                    updateOnlineCount(); // 更新人数
+                    updateOnlineCount();
                 });
             });
         }
@@ -285,17 +297,56 @@
             if(!r) return showToast('请输入房号');
             roomId = r;
             const btn = document.querySelector('#card-join .btn'); btn.disabled = true; btn.innerText = "正在寻找房间...";
+            retryCount = 0;
+            connectToHostLoop(btn);
+        }
+
+        function connectToHostLoop(btn) {
+            setLog('guest-log', `正在尝试连接 (第 ${retryCount + 1} 次)...`);
             
-            // 使用增强配置
+            // 每次重试创建一个新 Peer 实例，确保状态干净
+            if(peer) peer.destroy();
             peer = new Peer(null, PEER_CONFIG);
-            
+
             peer.on('open', () => {
-                hostConn = peer.connect('aurora-v10-' + roomId);
-                hostConn.on('open', () => switchCard('card-guest-auth'));
+                setLog('guest-log', '已连接服务器，正在呼叫房主...');
+                // 关键：开启 reliable 模式
+                hostConn = peer.connect('aurora-v10-' + roomId, { reliable: true });
+
+                let connected = false;
+
+                hostConn.on('open', () => {
+                    connected = true;
+                    setLog('guest-log', '连接成功！');
+                    switchCard('card-guest-auth');
+                });
+
                 hostConn.on('data', data => handleData(data));
-                setTimeout(() => { if(!hostConn.open) { btn.disabled = false; btn.innerText = "连接房主"; showToast('连接超时，请重试'); } }, 5000);
+                
+                // 15秒超时检测
+                setTimeout(() => {
+                    if(!connected) {
+                        handleConnectError(btn, "连接超时");
+                    }
+                }, 15000); 
             });
-            peer.on('error', err => { btn.disabled = false; btn.innerText = "连接房主"; showToast('连接失败'); });
+
+            peer.on('error', err => {
+                handleConnectError(btn, err.type);
+            });
+        }
+
+        function handleConnectError(btn, reason) {
+            console.warn("连接失败:", reason);
+            retryCount++;
+            if(retryCount < 3) {
+                // 2秒后重试
+                setTimeout(() => connectToHostLoop(btn), 2000);
+            } else {
+                btn.disabled = false; btn.innerText = "连接房主";
+                setLog('guest-log', `失败: ${reason} (请检查房号)`);
+                showToast('无法连接房主，请确认房号正确');
+            }
         }
 
         async function submitAuth() {
@@ -307,16 +358,8 @@
         }
 
         async function handleData(pkg, senderConn) {
-            if (pkg.type === 'FILE_META') {
-                handleFileStart(pkg);
-                if(myRole === 'host') broadcast(pkg, senderConn);
-                return;
-            }
-            if (pkg.type === 'FILE_CHUNK') {
-                handleFileChunk(pkg);
-                if(myRole === 'host') broadcast(pkg, senderConn);
-                return;
-            }
+            if (pkg.type === 'FILE_META') { handleFileStart(pkg); if(myRole === 'host') broadcast(pkg, senderConn); return; }
+            if (pkg.type === 'FILE_CHUNK') { handleFileChunk(pkg); if(myRole === 'host') broadcast(pkg, senderConn); return; }
             if (pkg.enc) {
                 try {
                     const plainStr = await CryptoManager.decryptText(pkg.enc);
@@ -324,10 +367,9 @@
                     if (data.type === 'HELLO') {
                         if(myRole === 'host') {
                             connMap.set(senderConn.peer, senderConn);
-                            updateOnlineCount(); // 新人加入
+                            updateOnlineCount(); 
                             sendEncryptedMsg(senderConn, { type: 'WELCOME', content: '连接成功', count: connMap.size + 1 });
                             showToast(`${data.nick} 加入房间`);
-                            // 广播给其他人，有人来了（可选）
                         }
                     } else if (data.type === 'WELCOME') {
                         showToast(data.content);
@@ -336,7 +378,10 @@
                         renderMsg(data, false);
                         if(myRole === 'host') broadcastRaw(pkg, senderConn);
                     }
-                } catch (e) { console.error(e); if(myRole === 'guest') { document.querySelector('#card-guest-auth .btn').disabled = false; showToast('密钥错误'); } }
+                } catch (e) { 
+                    console.error(e); 
+                    if(myRole === 'guest') { document.querySelector('#card-guest-auth .btn').disabled = false; showToast('密钥错误'); } 
+                }
             }
         }
 
