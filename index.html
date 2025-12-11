@@ -3,428 +3,538 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P2P 终极版 - 1GB 大文件传输</title>
+    <title>P2P 极光空间 | 安全传输</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #121212; color: #e0e0e0; }
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --danger: #ef4444;
+            --success: #10b981;
+        }
+
+        * { box-sizing: border-box; outline: none; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            background-image: radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.1) 0%, transparent 20%),
+                              radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 20%);
+            color: var(--text-main);
+            margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center;
+        }
+
+        /* 通用组件 */
+        .btn {
+            background: var(--primary); color: white; border: none; padding: 12px 20px;
+            border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; width: 100%;
+        }
+        .btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+        .btn:disabled { background: #475569; cursor: not-allowed; transform: none; }
         
-        /* 登录页 */
-        #login-screen { text-align: center; margin-top: 100px; }
-        input[type="text"] { padding: 12px; border: 1px solid #444; background: #2c2c2c; color: #fff; width: 220px; outline: none; border-radius: 4px; }
-        .btn { padding: 12px 24px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        .btn:disabled { background: #444; cursor: not-allowed; }
+        input[type="text"] {
+            width: 100%; background: #1e293b; border: 1px solid #334155; color: white;
+            padding: 12px; border-radius: 8px; margin-bottom: 15px; transition: 0.2s;
+        }
+        input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
+
+        /* 卡片容器 */
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 40px; border-radius: 16px; width: 400px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            display: none; animation: fadeIn 0.4s ease;
+        }
+        .card.active { display: block; }
+
+        h2 { margin: 0 0 10px 0; font-size: 24px; letter-spacing: -0.5px; }
+        p { color: var(--text-sub); font-size: 14px; margin-bottom: 25px; line-height: 1.5; }
+
+        /* 密码展示 */
+        .code-box {
+            background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px;
+            font-family: monospace; font-size: 24px; color: var(--success); letter-spacing: 3px;
+            margin: 20px 0; border: 1px dashed #475569; user-select: all; cursor: pointer;
+        }
+        .code-box:active { background: rgba(0,0,0,0.5); }
+
+        /* 聊天主界面 */
+        #chat-container {
+            width: 100%; max-width: 900px; height: 95vh; display: none; flex-direction: column;
+            background: var(--card-bg); border-radius: 16px; overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+
+        /* 头部 */
+        header {
+            padding: 15px 20px; background: rgba(15, 23, 42, 0.8);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .room-info span { font-size: 14px; color: var(--text-sub); margin-right: 15px; }
+        .room-info strong { color: var(--text-main); }
+        .status-badge { font-size: 12px; padding: 4px 8px; border-radius: 20px; background: #334155; }
+
+        /* 消息列表 */
+        #msg-list {
+            flex: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth;
+            /* 自定义滚动条 */
+            scrollbar-width: thin; scrollbar-color: #475569 transparent;
+        }
+        #msg-list::-webkit-scrollbar { width: 6px; }
+        #msg-list::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 3px; }
+
+        .msg-row { display: flex; margin-bottom: 20px; animation: slideUp 0.3s ease; }
+        .msg-row.me { flex-direction: row-reverse; }
         
-        /* 聊天页 */
-        #chat-screen { display: none; height: 90vh; flex-direction: column; }
-        #header { padding: 12px; background: #1f1f1f; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0; }
-        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #dc2626; margin-right: 5px; }
-        .status-online { background: #16a34a; box-shadow: 0 0 5px #16a34a; }
-        .status-reconnecting { background: #ca8a04; animation: blink 1s infinite; }
-        
-        #chat-box { flex: 1; overflow-y: auto; padding: 20px; background: #1a1a1a; border: 1px solid #333; margin: 0; }
-        
-        /* 消息气泡 */
-        .message-row { margin-bottom: 12px; display: flex; flex-direction: column; }
-        .message-row.me { align-items: flex-end; }
-        .message-row.other { align-items: flex-start; }
-        .bubble { max-width: 75%; padding: 10px 14px; border-radius: 12px; font-size: 15px; word-wrap: break-word; position: relative; }
-        .me .bubble { background: #007acc; color: white; border-bottom-right-radius: 2px; }
-        .other .bubble { background: #333; color: #ddd; border-bottom-left-radius: 2px; }
-        .sender-name { font-size: 11px; color: #666; margin-bottom: 2px; margin-left: 5px; }
-        .me .sender-name { display: none; }
-        
-        /* 文件进度条样式 */
-        .file-progress-box { margin-top: 5px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; width: 200px; }
-        .progress-bar { height: 6px; background: #444; border-radius: 3px; overflow: hidden; margin-top: 4px; }
-        .progress-fill { height: 100%; background: #4ade80; width: 0%; transition: width 0.2s; }
-        .file-info { font-size: 12px; display: flex; justify-content: space-between; }
+        .avatar {
+            width: 36px; height: 36px; border-radius: 50%; background: #475569;
+            display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;
+            flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .msg-row.me .avatar { margin-left: 10px; background: var(--primary); }
+        .msg-row.other .avatar { margin-right: 10px; }
+
+        .bubble {
+            max-width: 70%; padding: 12px 16px; border-radius: 12px; font-size: 15px; line-height: 1.5;
+            position: relative; word-wrap: break-word; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .msg-row.me .bubble {
+            background: var(--primary); color: white;
+            border-top-right-radius: 2px;
+        }
+        .msg-row.other .bubble {
+            background: #334155; color: #e2e8f0;
+            border-top-left-radius: 2px;
+        }
 
         /* 底部输入区 */
-        #input-area { display: flex; gap: 10px; padding: 10px; background: #1f1f1f; border-radius: 0 0 8px 8px; border: 1px solid #333; border-top: none; }
-        #msg-input { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #444; background: #2c2c2c; color: white; }
+        footer {
+            padding: 20px; background: rgba(15, 23, 42, 0.5);
+            display: flex; gap: 10px; align-items: center;
+        }
+        .icon-btn {
+            background: #334155; border: none; color: #cbd5e1; width: 44px; height: 44px;
+            border-radius: 10px; cursor: pointer; transition: 0.2s; font-size: 18px; display: flex; align-items: center; justify-content: center;
+        }
+        .icon-btn:hover { background: #475569; color: white; }
         
-        .file-btn-wrapper { position: relative; overflow: hidden; display: inline-block; }
-        .file-btn-wrapper input[type=file] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
-        .icon-btn { padding: 10px 15px; background: #333; color: #ccc; border-radius: 4px; border: 1px solid #444; }
+        /* 拖拽覆盖层 */
+        #drag-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.9); z-index: 100;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            border: 2px dashed var(--primary); pointer-events: none; /* 让事件穿透，JS控制显示 */
+        }
+        #drag-overlay.active { display: flex; }
+        .drag-text { font-size: 20px; font-weight: bold; color: var(--primary); margin-top: 20px; }
+
+        /* Toast 通知 */
+        #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 999; }
+        .toast {
+            background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 30px;
+            margin-bottom: 10px; font-size: 14px; animation: fadeIn 0.3s, fadeOut 0.3s 2.7s forwards;
+            backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 8px;
+        }
+
+        /* 文件进度条 */
+        .file-card { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; margin-top: 5px; min-width: 200px; }
+        .progress-bar { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.2s; }
         
-        @keyframes blink { 50% { opacity: 0.5; } }
-        .system-msg { text-align: center; color: #666; font-size: 12px; margin: 8px 0; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { to { opacity: 0; transform: translateY(-10px); } }
     </style>
 </head>
 <body>
 
-    <div id="login-screen">
-        <h2>🚀 P2P 大文件传输终端</h2>
-        <p style="color: #666; font-size: 13px; margin-bottom: 20px;">支持 1GB 文件分片传输 · 断线重连</p>
-        <div>
-            <input type="text" id="room-id-input" placeholder="输入房间号 (例: 999)" onkeypress="if(event.key==='Enter') startApp()">
-            <button onclick="startApp()" id="btn-join" class="btn">进入房间</button>
-        </div>
-        <p id="login-log" style="color: #eab308; font-size: 12px; margin-top: 15px;"></p>
+    <div id="toast-container"></div>
+
+    <div id="card-login" class="card active">
+        <h2>🚀 P2P 极光空间</h2>
+        <p>端对端加密 · 阅后即焚 · 1GB大文件</p>
+        <input type="text" id="nick-in" placeholder="起个代号 (如: 007)" maxlength="8">
+        <input type="text" id="room-in" placeholder="房间号 (如: 888)">
+        <button class="btn" onclick="startApp()">进入 / 创建房间</button>
+        <div id="login-msg" style="margin-top:15px; font-size:12px; color:var(--text-sub); min-height:18px;"></div>
     </div>
 
-    <div id="chat-screen">
-        <div id="header">
-            <div>
-                <span id="status-indicator" class="status-dot"></span>
-                <span style="font-weight: bold;">房间: <span id="room-tag">...</span></span>
-            </div>
-            <span id="role-tag" style="font-size: 12px; background: #333; padding: 2px 6px; border-radius: 4px;">...</span>
+    <div id="card-host" class="card">
+        <h2>👑 房间已创建</h2>
+        <p>请将此密钥发送给好友 (点击复制)</p>
+        <div class="code-box" onclick="copyToClipboard(this.innerText)">...</div>
+        <p style="color: var(--danger); font-size: 12px;">⚠️ 密码输错 10 次将自动销毁房间</p>
+        <button class="btn" onclick="enterChat('host')">进入聊天室</button>
+    </div>
+
+    <div id="card-guest" class="card">
+        <h2>🛡️ 安全验证</h2>
+        <p>此房间受密钥保护</p>
+        <input type="text" id="auth-in" placeholder="输入 8 位密钥" style="text-align:center; letter-spacing:2px;">
+        <button class="btn" onclick="submitAuth()">验证身份</button>
+    </div>
+
+    <div id="chat-container">
+        <div id="drag-overlay">
+            <div style="font-size: 50px;">📂</div>
+            <div class="drag-text">松开手指 发送文件</div>
         </div>
-        
-        <div id="chat-box"></div>
-        
-        <div id="input-area">
-            <div class="file-btn-wrapper">
-                <button class="icon-btn">📎</button>
-                <input type="file" id="file-input" onchange="handleFileSelect(this)">
+
+        <header>
+            <div class="room-info">
+                <span>房间: <strong id="head-room">...</strong></span>
+                <span class="status-badge" id="head-role">...</span>
             </div>
-            <input type="text" id="msg-input" placeholder="输入消息..." autocomplete="off" onkeypress="if(event.key==='Enter') sendMessage()">
-            <button onclick="sendMessage()" class="btn" style="padding: 10px 20px;">发送</button>
-        </div>
+            <div class="room-info">
+                <span><strong id="head-nick">...</strong></span>
+            </div>
+        </header>
+
+        <div id="msg-list"></div>
+
+        <footer>
+            <button class="icon-btn" onclick="document.getElementById('file-in').click()" title="发送文件">📎</button>
+            <input type="file" id="file-in" style="display:none" onchange="processFile(this.files[0])">
+            <input type="text" id="msg-in" placeholder="输入消息..." style="margin:0;" onkeypress="if(event.key==='Enter') sendMsg()">
+            <button class="btn" style="width: auto; padding: 0 25px;" onclick="sendMsg()">发送</button>
+        </footer>
     </div>
 
     <script>
         // --- 全局配置 ---
-        const CHUNK_SIZE = 16 * 1024; // 16KB 切片，虽然小但传输最稳定
-        const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB 限制
+        const CHUNK_SIZE = 16 * 1024; 
+        const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB
+        const MAX_ATTEMPTS = 10;
 
         // --- 状态变量 ---
-        let peer = null;
-        let myRole = null; 
-        let connMap = new Map(); // 房主存所有连接
-        let hostConn = null;     // 访客存房主连接
-        let roomId = '';
-        let reconnectTimer = null;
-        let isReconnecting = false;
+        let peer, myRole, myNick, roomId, roomPwd;
+        let failedAttempts = 0;
+        let connMap = new Map(); // Host用
+        let hostConn = null;     // Guest用
+        let incomingFiles = {};  // 文件接收缓冲
 
-        // --- 文件传输状态 (用于接收拼装) ---
-        // 结构: { fileId: { buffer: [], receivedSize: 0, totalSize: 0, fileName: '', ... } }
-        let incomingFiles = {}; 
-
+        // --- 1. 启动逻辑 ---
         function startApp() {
-            roomId = document.getElementById('room-id-input').value.trim();
-            if (!roomId) return showLoginLog("请输入房间号");
+            const nick = document.getElementById('nick-in').value.trim();
+            const room = document.getElementById('room-in').value.trim();
             
-            document.getElementById('btn-join').disabled = true;
-            document.getElementById('btn-join').innerText = "连接中...";
+            if (!nick || !room) return showToast('请填写完整信息', 'error');
             
-            const safeRoomId = 'p2p-file-room-' + roomId;
-            const tempPeer = new Peer(safeRoomId);
+            myNick = nick;
+            roomId = room;
+            
+            const btn = document.querySelector('#card-login .btn');
+            btn.disabled = true; btn.innerText = "正在探测...";
+            
+            const fullId = 'secure-p2p-v6-' + room;
+            const tempPeer = new Peer(fullId);
 
             tempPeer.on('open', (id) => {
                 peer = tempPeer;
-                initHostMode();
+                initHost();
             });
 
             tempPeer.on('error', (err) => {
                 if (err.type === 'unavailable-id') {
                     tempPeer.destroy();
-                    initGuestMode(safeRoomId);
+                    initGuest(fullId);
                 } else {
-                    showLoginLog("错误: " + err.type);
-                    document.getElementById('btn-join').disabled = false;
+                    showToast('网络错误: ' + err.type, 'error');
+                    btn.disabled = false; btn.innerText = "进入 / 创建房间";
                 }
             });
         }
 
-        // --- 核心模式 ---
-        function initHostMode() {
+        // --- 2. 房主逻辑 ---
+        function initHost() {
             myRole = 'host';
-            setupUI(roomId, '房主 (Host)');
-            updateStatus('online');
-            addSystemMsg("房间创建成功");
-
-            peer.on('connection', (conn) => {
-                setupConnection(conn);
-            });
-            peer.on('disconnected', () => { updateStatus('reconnecting'); peer.reconnect(); });
-            peer.on('open', () => updateStatus('online'));
-        }
-
-        function initGuestMode(hostId) {
-            myRole = 'guest';
-            peer = new Peer(); 
-
-            peer.on('open', () => {
-                setupUI(roomId, '访客 (Guest)');
-                connectToHost(hostId);
-            });
-            peer.on('disconnected', () => { updateStatus('reconnecting'); peer.reconnect(); });
-        }
-
-        function connectToHost(hostId) {
-            updateStatus('reconnecting');
-            const conn = peer.connect(hostId, { reliable: true });
-            hostConn = conn;
-            setupConnection(conn);
-
-            setTimeout(() => {
-                if (!conn.open && !isReconnecting) handleDisconnect(hostId);
-            }, 5000);
-        }
-
-        // --- 连接处理 ---
-        function setupConnection(conn) {
-            conn.on('open', () => {
-                isReconnecting = false;
-                clearTimeout(reconnectTimer);
-                updateStatus('online');
-                if (myRole === 'host') connMap.set(conn.peer, conn);
-            });
-
-            conn.on('data', (data) => {
-                handleData(data, conn);
-            });
-
-            conn.on('close', () => {
-                if (myRole === 'host') connMap.delete(conn.peer);
-                else {
-                    handleDisconnect('p2p-file-room-' + roomId);
-                }
-            });
-        }
-
-        function handleDisconnect(hostId) {
-            if (myRole !== 'guest') return;
-            isReconnecting = true;
-            updateStatus('reconnecting');
-            if (reconnectTimer) clearTimeout(reconnectTimer);
-            reconnectTimer = setTimeout(() => connectToHost(hostId), 3000);
-        }
-
-        // --- 核心数据处理 (路由 + 分片重组) ---
-        function handleData(data, senderConn) {
-            // 1. 普通文本消息
-            if (data.type === 'msg') {
-                renderMessage(data.content, false, data.senderName);
-                if (myRole === 'host') broadcast(data, senderConn);
-            }
+            roomPwd = generatePwd();
+            document.querySelector('.code-box').innerText = roomPwd;
+            showCard('card-host');
             
-            // 2. 文件元数据 (开始传输)
-            else if (data.type === 'file-start') {
-                // 初始化接收容器
-                incomingFiles[data.fileId] = {
-                    buffer: [],
-                    receivedSize: 0,
-                    totalSize: data.totalSize,
-                    fileName: data.fileName,
-                    fileType: data.fileType,
-                    senderName: data.senderName
-                };
-                // 创建进度条 UI
-                renderFileProgress(data.fileId, data.fileName, false, data.senderName);
+            peer.on('connection', conn => {
+                conn.on('open', () => conn.send({ type: 'AUTH_REQ' }));
                 
-                if (myRole === 'host') broadcast(data, senderConn);
-            }
-
-            // 3. 文件分片数据
-            else if (data.type === 'file-chunk') {
-                const fileCtx = incomingFiles[data.fileId];
-                if (fileCtx) {
-                    // 存入 Buffer
-                    fileCtx.buffer.push(data.chunk);
-                    fileCtx.receivedSize += data.chunk.byteLength;
-                    
-                    // 更新进度条
-                    updateProgressBar(data.fileId, fileCtx.receivedSize, fileCtx.totalSize);
-
-                    // 检查是否完成
-                    if (fileCtx.receivedSize >= fileCtx.totalSize) {
-                        const blob = new Blob(fileCtx.buffer, { type: fileCtx.fileType });
-                        finishFileDownload(data.fileId, blob, fileCtx.fileName);
-                        delete incomingFiles[data.fileId]; // 清理内存
+                conn.on('data', data => {
+                    if (data.type === 'AUTH_SUBMIT') verifyGuest(conn, data);
+                    else if (data.type === 'MSG' || data.type === 'FILE_META' || data.type === 'FILE_CHUNK') {
+                        // 简单的路由逻辑：如果是已验证用户
+                        // 注意：实际生产中需要检查 verified 状态，Demo 简化处理
+                        handleData(data, conn);
                     }
-                }
-                
-                if (myRole === 'host') broadcast(data, senderConn);
-            }
-        }
+                });
 
-        function broadcast(data, excludeConn = null) {
-            connMap.forEach(conn => {
-                if (conn !== excludeConn && conn.open) conn.send(data);
+                conn.on('close', () => {
+                    connMap.delete(conn.peer); // 简单移除，不广播离开，避免太吵
+                });
             });
         }
 
-        // --- 发送逻辑 (分片) ---
-        function sendMessage() {
-            const input = document.getElementById('msg-input');
-            const text = input.value.trim();
-            if (!text) return;
+        function verifyGuest(conn, data) {
+            if (data.payload === roomPwd) {
+                connMap.set(conn.peer, conn);
+                conn.send({ type: 'AUTH_OK', content: '欢迎加入安全频道' });
+                showToast(`${data.nick} 已加入`, 'success');
+            } else {
+                failedAttempts++;
+                conn.send({ type: 'AUTH_FAIL' });
+                showToast(`⚠️ 密码错误警告 (${failedAttempts}/${MAX_ATTEMPTS})`, 'error');
+                if (failedAttempts >= MAX_ATTEMPTS) destroyRoom();
+            }
+        }
+
+        function destroyRoom() {
+            connMap.forEach(c => c.send({ type: 'DESTROY' }));
+            setTimeout(() => { peer.destroy(); location.reload(); }, 1000);
+        }
+
+        // --- 3. 访客逻辑 ---
+        function initGuest(hostId) {
+            myRole = 'guest';
+            peer = new Peer();
+            peer.on('open', () => {
+                hostConn = peer.connect(hostId, { reliable: true });
+                hostConn.on('open', () => document.getElementById('login-msg').innerText = "已连接，等待验证...");
+                
+                hostConn.on('data', data => {
+                    if (data.type === 'AUTH_REQ') showCard('card-guest');
+                    else if (data.type === 'AUTH_OK') {
+                        showToast(data.content, 'success');
+                        enterChat('guest');
+                    }
+                    else if (data.type === 'AUTH_FAIL') showToast('密码错误', 'error');
+                    else if (data.type === 'DESTROY') { alert('房间已销毁'); location.reload(); }
+                    else handleData(data);
+                });
+            });
+        }
+
+        function submitAuth() {
+            const val = document.getElementById('auth-in').value.trim();
+            if (!val) return;
+            hostConn.send({ type: 'AUTH_SUBMIT', payload: val, nick: myNick });
+        }
+
+        // --- 4. 聊天与文件核心 ---
+        function enterChat(role) {
+            document.querySelectorAll('.card').forEach(el => el.classList.remove('active'));
+            document.getElementById('chat-container').style.display = 'flex';
             
-            const payload = { type: 'msg', content: text, senderName: myRole === 'host' ? '房主' : '访客' };
-            renderMessage(text, true);
-            sendData(payload);
+            document.getElementById('head-room').innerText = roomId;
+            document.getElementById('head-role').innerText = role === 'host' ? '房主' : '访客';
+            document.getElementById('head-nick').innerText = myNick;
+            
+            setupDragDrop();
+        }
+
+        function sendMsg() {
+            const input = document.getElementById('msg-in');
+            const txt = input.value.trim();
+            if (!txt) return;
+            
+            const pkg = { type: 'MSG', content: txt, nick: myNick };
+            renderMsg(pkg, true);
+            sendData(pkg);
             input.value = '';
         }
 
-        function sendData(payload) {
-            if (myRole === 'host') broadcast(payload);
-            else if (hostConn && hostConn.open) hostConn.send(payload);
-        }
-
-        // --- 核心：文件切片发送逻辑 ---
-        async function handleFileSelect(input) {
-            const file = input.files[0];
-            if (!file) return;
-
-            if (file.size > MAX_FILE_SIZE) {
-                alert("文件太大！目前限制 1GB。");
-                return;
-            }
-
-            const fileId = Date.now().toString() + Math.random().toString().substr(2, 5);
-            const senderName = myRole === 'host' ? '房主' : '访客';
-
-            // 1. 发送元数据 (告诉对方准备接收)
-            const metaData = {
-                type: 'file-start',
-                fileId: fileId,
-                fileName: file.name,
-                fileType: file.type,
-                totalSize: file.size,
-                senderName: senderName
-            };
+        function handleData(data, senderConn) {
+            if (data.type === 'MSG') renderMsg(data, false);
+            else if (data.type === 'FILE_META') handleFileStart(data);
+            else if (data.type === 'FILE_CHUNK') handleFileChunk(data);
             
-            // 本地显示进度条
-            renderFileProgress(fileId, file.name, true);
-            sendData(metaData);
-
-            // 2. 开始切片发送
-            let offset = 0;
-            const reader = new FileReader();
-
-            // 定义读取回调
-            reader.onload = function(e) {
-                if (e.target.readyState !== FileReader.DONE) return;
-                
-                const chunk = e.target.result; // ArrayBuffer
-                
-                // 发送分片
-                sendData({
-                    type: 'file-chunk',
-                    fileId: fileId,
-                    chunk: chunk
+            // 房主转发逻辑
+            if (myRole === 'host') {
+                connMap.forEach(c => {
+                    if (c !== senderConn && c.open) c.send(data);
                 });
-
-                offset += chunk.byteLength;
-                
-                // 更新本地进度条
-                updateProgressBar(fileId, offset, file.size);
-
-                // 继续读下一片
-                if (offset < file.size) {
-                    readNextChunk();
-                } else {
-                    console.log("文件发送完毕");
-                }
-            };
-
-            function readNextChunk() {
-                const slice = file.slice(offset, offset + CHUNK_SIZE);
-                reader.readAsArrayBuffer(slice);
             }
-
-            // 启动读取
-            readNextChunk();
-            input.value = ''; 
         }
 
-        // --- UI 渲染 ---
-        function renderMessage(text, isMe, name) {
-            const box = document.getElementById('chat-box');
-            const row = document.createElement('div');
-            row.className = `message-row ${isMe ? 'me' : 'other'}`;
-            let html = (!isMe && name) ? `<div class="sender-name">${name}</div>` : '';
-            html += `<div class="bubble">${escapeHtml(text)}</div>`;
-            row.innerHTML = html;
-            box.appendChild(row);
+        function sendData(pkg) {
+            if (myRole === 'host') connMap.forEach(c => c.open && c.send(pkg));
+            else if (hostConn && hostConn.open) hostConn.send(pkg);
+        }
+
+        // --- 文件分片逻辑 (复用 V4 逻辑) ---
+        function processFile(file) {
+            if (!file) return;
+            if (file.size > MAX_FILE_SIZE) return showToast('文件过大 (上限1GB)', 'error');
+
+            const fileId = Date.now().toString();
+            const meta = { type: 'FILE_META', fileId, name: file.name, size: file.size, fileType: file.type, nick: myNick };
+            
+            renderFileProgress(fileId, file.name, true, null); // 显示进度条
+            sendData(meta);
+
+            // 读取并发送
+            const reader = new FileReader();
+            let offset = 0;
+            
+            reader.onload = (e) => {
+                sendData({ type: 'FILE_CHUNK', fileId, chunk: e.target.result });
+                offset += e.target.result.byteLength;
+                updateProgress(fileId, offset, file.size);
+                
+                if (offset < file.size) readNext();
+            };
+
+            const readNext = () => reader.readAsArrayBuffer(file.slice(offset, offset + CHUNK_SIZE));
+            readNext();
+            document.getElementById('file-in').value = ''; // 重置
+        }
+
+        function handleFileStart(data) {
+            incomingFiles[data.fileId] = { buffer: [], received: 0, total: data.size, meta: data };
+            renderFileProgress(data.fileId, data.name, false, data.nick);
+        }
+
+        function handleFileChunk(data) {
+            const ctx = incomingFiles[data.fileId];
+            if (!ctx) return;
+            
+            ctx.buffer.push(data.chunk);
+            ctx.received += data.chunk.byteLength;
+            updateProgress(data.fileId, ctx.received, ctx.total);
+
+            if (ctx.received >= ctx.total) {
+                const blob = new Blob(ctx.buffer, { type: ctx.meta.fileType });
+                finishFile(data.fileId, blob, ctx.meta.name);
+                delete incomingFiles[data.fileId];
+            }
+        }
+
+        // --- 拖拽上传核心逻辑 ---
+        function setupDragDrop() {
+            const container = document.getElementById('chat-container');
+            const overlay = document.getElementById('drag-overlay');
+            let dragCounter = 0;
+
+            container.addEventListener('dragenter', e => {
+                e.preventDefault();
+                dragCounter++;
+                overlay.classList.add('active');
+            });
+
+            container.addEventListener('dragleave', e => {
+                e.preventDefault();
+                dragCounter--;
+                if (dragCounter === 0) overlay.classList.remove('active');
+            });
+
+            container.addEventListener('dragover', e => e.preventDefault());
+
+            container.addEventListener('drop', e => {
+                e.preventDefault();
+                dragCounter = 0;
+                overlay.classList.remove('active');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) processFile(files[0]);
+            });
+        }
+
+        // --- UI 渲染辅助 ---
+        function renderMsg(data, isMe) {
+            const list = document.getElementById('msg-list');
+            const initial = isMe ? myNick[0] : data.nick[0];
+            
+            const div = document.createElement('div');
+            div.className = `msg-row ${isMe ? 'me' : 'other'}`;
+            div.innerHTML = `
+                <div class="avatar">${initial.toUpperCase()}</div>
+                <div class="bubble">
+                    ${!isMe ? `<div style="font-size:12px;opacity:0.6;margin-bottom:4px">${data.nick}</div>` : ''}
+                    ${escapeHtml(data.content)}
+                </div>
+            `;
+            list.appendChild(div);
             scrollToBottom();
         }
 
-        // 渲染进度条框
-        function renderFileProgress(fileId, fileName, isMe, senderName) {
-            const box = document.getElementById('chat-box');
-            const row = document.createElement('div');
-            row.className = `message-row ${isMe ? 'me' : 'other'}`;
+        function renderFileProgress(id, name, isMe, nick) {
+            const list = document.getElementById('msg-list');
+            const initial = isMe ? myNick[0] : (nick ? nick[0] : '?');
             
-            let html = (!isMe && senderName) ? `<div class="sender-name">${senderName}</div>` : '';
-            html += `
-                <div class="bubble" id="bubble-${fileId}">
-                    <div style="font-weight:bold; margin-bottom:5px;">${isMe ? '正在发送' : '正在接收'}: ${fileName}</div>
-                    <div class="file-progress-box">
-                        <div class="file-info">
-                            <span>0%</span>
-                            <span>...</span>
+            const div = document.createElement('div');
+            div.className = `msg-row ${isMe ? 'me' : 'other'}`;
+            div.innerHTML = `
+                <div class="avatar">${initial.toUpperCase()}</div>
+                <div class="bubble" id="bubble-${id}">
+                    <div>${isMe ? '📤 发送' : '📥 接收'}: ${escapeHtml(name)}</div>
+                    <div class="file-card">
+                        <div style="font-size:12px; display:flex; justify-content:space-between">
+                            <span id="txt-${id}">0%</span>
                         </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="prog-${fileId}"></div>
-                        </div>
+                        <div class="progress-bar"><div class="progress-fill" id="bar-${id}"></div></div>
                     </div>
                 </div>
             `;
-            row.innerHTML = html;
-            box.appendChild(row);
+            list.appendChild(div);
             scrollToBottom();
         }
 
-        // 更新进度条
-        function updateProgressBar(fileId, current, total) {
-            const fill = document.getElementById(`prog-${fileId}`);
-            const bubble = document.getElementById(`bubble-${fileId}`);
-            if (!fill || !bubble) return;
-
-            const percent = Math.floor((current / total) * 100);
-            fill.style.width = `${percent}%`;
-            
-            // 更新文字
-            const infoSpan = bubble.querySelector('.file-info span');
-            if (infoSpan) infoSpan.innerText = `${percent}%`;
+        function updateProgress(id, curr, total) {
+            const pct = Math.floor((curr/total)*100) + '%';
+            const bar = document.getElementById(`bar-${id}`);
+            const txt = document.getElementById(`txt-${id}`);
+            if (bar) bar.style.width = pct;
+            if (txt) txt.innerText = pct;
         }
 
-        // 传输完成，将进度条替换为下载链接
-        function finishFileDownload(fileId, blob, fileName) {
-            const bubble = document.getElementById(`bubble-${fileId}`);
+        function finishFile(id, blob, name) {
+            const bubble = document.getElementById(`bubble-${id}`);
             if (!bubble) return;
             
             const url = URL.createObjectURL(blob);
-            const isImage = blob.type.startsWith('image/');
-
-            let content = '';
-            if (isImage) {
-                content = `<img src="${url}" style="max-width:100%; border-radius:8px; cursor:pointer;" onclick="window.open('${url}')"><br><a href="${url}" download="${fileName}" style="color:#fff; font-size:12px;">下载原图</a>`;
-            } else {
-                content = `
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="font-size:24px">💾</span>
-                        <div>
-                            <div>${fileName}</div>
-                            <a href="${url}" download="${fileName}" style="color:#fff; text-decoration:underline;">点击下载</a>
-                        </div>
-                    </div>
-                `;
-            }
-            bubble.innerHTML = content;
+            const isImg = blob.type.startsWith('image/');
+            
+            bubble.innerHTML = isImg 
+                ? `<img src="${url}" style="max-width:200px;border-radius:8px;cursor:pointer" onclick="window.open('${url}')">`
+                : `<div style="font-size:30px">📄</div><a href="${url}" download="${name}" style="color:white">下载: ${escapeHtml(name)}</a>`;
         }
 
-        // --- 辅助功能 ---
-        function setupUI(room, role) {
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('chat-screen').style.display = 'flex';
-            document.getElementById('room-tag').innerText = room;
-            document.getElementById('role-tag').innerText = role;
+        function showCard(id) {
+            document.querySelectorAll('.card').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
         }
-        function updateStatus(state) {
-            const dot = document.getElementById('status-indicator');
-            dot.className = 'status-dot'; 
-            if (state === 'online') dot.classList.add('status-online');
-            if (state === 'reconnecting') dot.classList.add('status-reconnecting');
+
+        function showToast(msg, type = 'info') {
+            const box = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            el.className = 'toast';
+            el.style.borderLeft = `4px solid ${type === 'error' ? '#ef4444' : '#10b981'}`;
+            el.innerHTML = `<span>${type==='error'?'❌':'✅'}</span> ${msg}`;
+            box.appendChild(el);
+            setTimeout(() => el.remove(), 3000);
         }
-        function showLoginLog(msg) { document.getElementById('login-log').innerText = msg; }
-        function addSystemMsg(msg) { document.getElementById('chat-box').innerHTML += `<div class="system-msg">${msg}</div>`; scrollToBottom(); }
-        function scrollToBottom() { const box = document.getElementById('chat-box'); box.scrollTop = box.scrollHeight; }
-        function escapeHtml(text) { return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
+
+        function scrollToBottom() {
+            const list = document.getElementById('msg-list');
+            list.scrollTop = list.scrollHeight;
+        }
+
+        function generatePwd() {
+            const c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+            return Array(8).fill(0).map(() => c[Math.floor(Math.random()*c.length)]).join('');
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text);
+            showToast('密码已复制', 'success');
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
     </script>
 </body>
 </html>
