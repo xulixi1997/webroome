@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P 极简聊天室</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #1a1a1a; color: #e0e0e0; }
+        /* 登录页样式 */
+        #login-screen { text-align: center; margin-top: 100px; }
+        input { padding: 12px; font-size: 16px; border-radius: 4px; border: 1px solid #444; background: #333; color: #fff; width: 200px; outline: none; }
+        button { padding: 12px 24px; font-size: 16px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #0062a3; }
+        
+        /* 聊天页样式 */
+        #chat-screen { display: none; height: 90vh; display: flex; flex-direction: column; } /* 默认隐藏，用 js 控制显示 */
+        #header { padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        #room-tag { font-weight: bold; color: #007acc; }
+        #role-tag { font-size: 12px; padding: 2px 6px; border-radius: 4px; }
+        .role-host { background: #b91c1c; color: white; } /* 红色房主 */
+        .role-guest { background: #15803d; color: white; } /* 绿色访客 */
+        
+        #chat-box { flex: 1; overflow-y: auto; padding: 20px; background: #222; border: 1px solid #333; border-radius: 8px; margin: 10px 0; }
+        .message-row { margin-bottom: 10px; display: flex; }
+        .message-row.me { justify-content: flex-end; }
+        .bubble { max-width: 70%; padding: 8px 12px; border-radius: 12px; font-size: 15px; line-height: 1.4; word-wrap: break-word; }
+        .me .bubble { background: #007acc; color: white; border-bottom-right-radius: 2px; }
+        .other .bubble { background: #333; color: #ddd; border-bottom-left-radius: 2px; }
+        .system-msg { text-align: center; color: #666; font-size: 13px; margin: 10px 0; }
+        
+        #input-area { display: flex; gap: 10px; }
+        #msg-input { flex: 1; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h2 style="color: #fff;">🚪 进入秘密聊天室</h2>
+        <p style="color: #888; font-size: 14px; margin-bottom: 20px;">数据不经服务器存储 · 页面关闭即焚</p>
+        <div>
+            <input type="text" id="room-id-input" placeholder="输入房间暗号 (如: 1234)" onkeypress="if(event.key==='Enter') startApp()">
+            <button onclick="startApp()" id="btn-join">进入</button>
+        </div>
+        <p id="status-log" style="color: #eab308; font-size: 12px; margin-top: 15px; min-height: 20px;"></p>
+    </div>
+
+    <div id="chat-screen" style="display: none;"> <div id="header">
+            <span>房间: <span id="room-tag">...</span></span>
+            <span id="role-tag" class="role-guest">正在连接...</span>
+        </div>
+        
+        <div id="chat-box"></div>
+        
+        <div id="input-area">
+            <input type="text" id="msg-input" placeholder="说点什么..." autocomplete="off" onkeypress="if(event.key==='Enter') sendMessage()">
+            <button onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+
+    <script>
+        let peer = null;       // 我的 Peer 对象
+        let myRole = 'unknown'; // 'host' 或 'guest'
+        let connections = [];   // 存放所有连接对象 (房主用)
+        let hostConnection = null; // 存放房主连接对象 (访客用)
+        let roomId = '';
+
+        // 启动逻辑
+        function startApp() {
+            roomId = document.getElementById('room-id-input').value.trim();
+            if (!roomId) return showLog("请输入房间号");
+            
+            // 锁定按钮，防止重复点击
+            document.getElementById('btn-join').disabled = true;
+            document.getElementById('btn-join').innerText = "正在尝试进入...";
+            showLog("正在探测房间状态...");
+
+            // 1. 尝试注册为房主 (使用房间号作为 Peer ID)
+            // 注意：PeerJS 的 ID 只能包含字母、数字、中划线
+            const safeRoomId = 'room-' + roomId; 
+            
+            // 尝试以房间名初始化 Peer
+            const tempPeer = new Peer(safeRoomId);
+
+            // 注册成功 -> 我是房主
+            tempPeer.on('open', (id) => {
+                peer = tempPeer;
+                initHostMode(id);
+            });
+
+            // 注册失败 (ID 被占用) -> 房间已存在 -> 我是访客
+            tempPeer.on('error', (err) => {
+                if (err.type === 'unavailable-id') {
+                    showLog("房间已存在，正在作为访客加入...");
+                    // 销毁旧对象，重新创建一个随机 ID 的 Peer
+                    tempPeer.destroy(); 
+                    initGuestMode(safeRoomId);
+                } else {
+                    showLog("错误: " + err.type);
+                    document.getElementById('btn-join').disabled = false;
+                }
+            });
+        }
+
+        // --- 房主模式逻辑 ---
+        function initHostMode(id) {
+            myRole = 'host';
+            enterChatScreen(roomId, '房主 (Host)');
+            addSystemMsg("你创建了房间。等待其他人加入...");
+
+            // 监听别人连接我
+            peer.on('connection', (conn) => {
+                connections.push(conn);
+                setupConnection(conn);
+                addSystemMsg("新用户加入了聊天");
+                
+                // (可选) 发送欢迎语
+                conn.on('open', () => {
+                    conn.send({ type: 'msg', content: '欢迎加入！当前房间由你主持。', sender: 'System' });
+                });
+            });
+        }
+
+        // --- 访客模式逻辑 ---
+        function initGuestMode(hostId) {
+            // 创建一个随机 ID
+            peer = new Peer(); 
+            
+            peer.on('open', () => {
+                myRole = 'guest';
+                enterChatScreen(roomId, '访客 (Guest)');
+                addSystemMsg("正在连接房主...");
+                
+                // 主动连接房主
+                const conn = peer.connect(hostId);
+                hostConnection = conn;
+                setupConnection(conn);
+            });
+
+            peer.on('error', err => {
+                console.error(err);
+                addSystemMsg("连接房主失败，可能房间刚关闭。");
+            });
+        }
+
+        // --- 通用连接处理 (处理收发消息) ---
+        function setupConnection(conn) {
+            conn.on('open', () => {
+                // 连接建立
+            });
+
+            conn.on('data', (data) => {
+                // 收到消息 data = { type: 'msg', content: '...', sender: '...' }
+                if (data.type === 'msg') {
+                    // 显示消息
+                    if (data.sender !== 'System') {
+                        addMessageBubble(data.content, false);
+                    } else {
+                        addSystemMsg(data.content);
+                    }
+
+                    // 如果我是房主，我要把这条消息“广播”给其他所有人
+                    if (myRole === 'host') {
+                        broadcastMessage(data, conn); // 排除来源 conn，不再发回给发信人
+                    }
+                }
+            });
+
+            conn.on('close', () => {
+                addSystemMsg("有人离开了聊天");
+                // 如果我是房主，清理断开的连接
+                if (myRole === 'host') {
+                    connections = connections.filter(c => c !== conn);
+                }
+            });
+        }
+
+        // --- 发送消息逻辑 ---
+        function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            // 1. 显示在自己屏幕上
+            addMessageBubble(text, true);
+
+            // 2. 包装消息包
+            const msgPackage = { type: 'msg', content: text, sender: peer.id };
+
+            // 3. 发送
+            if (myRole === 'host') {
+                // 房主：发给所有人
+                broadcastMessage(msgPackage); 
+            } else {
+                // 访客：只发给房主 (房主会代为转发给其他人)
+                if (hostConnection && hostConnection.open) {
+                    hostConnection.send(msgPackage);
+                } else {
+                    addSystemMsg("❌ 未连接到房主，发送失败");
+                }
+            }
+
+            input.value = '';
+        }
+
+        // 房主广播功能 (将消息转发给除 sourceConn 以外的所有人)
+        function broadcastMessage(msgPackage, sourceConn = null) {
+            connections.forEach(conn => {
+                if (conn !== sourceConn && conn.open) {
+                    conn.send(msgPackage);
+                }
+            });
+        }
+
+        // --- UI 操作 ---
+        function enterChatScreen(roomName, roleName) {
+            document.getElementById('login-screen').style.display = 'none';
+            // 显式设置为 flex，因为我们在 CSS 里用了 display: flex
+            document.getElementById('chat-screen').style.display = 'flex'; 
+            
+            document.getElementById('room-tag').innerText = roomName;
+            const roleEl = document.getElementById('role-tag');
+            roleEl.innerText = roleName;
+            roleEl.className = myRole === 'host' ? 'role-host' : 'role-guest';
+        }
+
+        function addMessageBubble(text, isMe) {
+            const box = document.getElementById('chat-box');
+            const row = document.createElement('div');
+            row.className = `message-row ${isMe ? 'me' : 'other'}`;
+            row.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+            box.appendChild(row);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function addSystemMsg(text) {
+            const box = document.getElementById('chat-box');
+            const div = document.createElement('div');
+            div.className = 'system-msg';
+            div.innerText = text;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function showLog(text) {
+            document.getElementById('status-log').innerText = text;
+        }
+
+        // 防止 XSS 攻击的简单转义
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
